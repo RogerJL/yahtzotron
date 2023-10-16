@@ -26,9 +26,10 @@ setup(
     install_requires=[
         "click",
         "numpy",
+        "numpyro",
         "loguru",
         "jax",
-        "dm-haiku",
+        "flax",
         "rlax",
         "optax",
         "tqdm",

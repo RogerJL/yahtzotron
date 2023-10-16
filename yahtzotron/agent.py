@@ -7,12 +7,17 @@ import numpy as np
 
 import jax
 import jax.numpy as jnp
-import haiku as hk
+import flax.linen as nn
+
+import numpyro
 
 from .rulesets import AVAILABLE_RULESETS
 from .strategy import assemble_roll_lut
 
-key = hk.PRNGSequence(17)
+module_key = __name__ + '$params'  # TODO: should module name be accepted?
+nn_params = numpyro.param(module_key, hash(module_key))
+
+key = numpyro.prng_key()  #hk.PRNGSequence(17)
 memoize = functools.lru_cache(maxsize=None)
 
 DISK_CACHE = os.path.expanduser(os.path.join("~", ".yahtzotron"))
@@ -23,7 +28,7 @@ def create_network(objective, num_dice, num_categories):
     """Create the neural networks used by the agent."""
     from yahtzotron.training import MINIMUM_LOGIT
 
-    input_shapes = [
+    input_groups = [
         1,  # number of rerolls left
         6,  # count of each die value
         num_categories,  # player scorecard
@@ -31,76 +36,82 @@ def create_network(objective, num_dice, num_categories):
     ]
 
     if objective == "win":
-        input_shapes.append(
+        input_groups.append(
             1,  # opponent value
         )
 
+    input_shape = (1, sum(input_groups))
+
     keep_action_space = 2 ** num_dice
 
-    def network(inputs):
-        rolls_left = inputs[..., 0, None]
-        player_scorecard_idx = slice(sum(input_shapes[:2]), sum(input_shapes[:3]))
-        init = hk.initializers.VarianceScaling(2.0, "fan_in", "truncated_normal")
+    class Decide(nn.Module):
+        @nn.compact
+        def __call__(self, inputs):
+            rolls_left = inputs[..., 0, None]
+            player_scorecard_idx = slice(sum(input_groups[:2]), sum(input_groups[:3]))
+            init = nn.initializers.variance_scaling(2.0, "fan_in", "truncated_normal")
 
-        x = hk.Linear(128, w_init=init)(inputs)
-        x = jax.nn.relu(x)
-        x = hk.Linear(256, w_init=init)(x)
-        x = jax.nn.relu(x)
-        x = hk.Linear(128, w_init=init)(x)
-        x = jax.nn.relu(x)
+            x = nn.Dense(128, w_init=init)(inputs)
+            x = jax.nn.relu(x)
+            x = nn.Dense(256, w_init=init)(x)
+            x = jax.nn.relu(x)
+            x = nn.Dense(128, w_init=init)(x)
+            x = jax.nn.relu(x)
 
-        out_value = hk.Linear(1)(x)
+            out_value = nn.Dense(1)(x)
 
-        out_keep = hk.Linear(keep_action_space)(x)
+            out_keep = nn.Dense(keep_action_space)(x)
 
-        out_category = hk.Linear(num_categories)(x)
-        out_category = jnp.where(
-            # disallow already filled categories
-            inputs[..., player_scorecard_idx] == 1,
-            -jnp.inf,
-            out_category,
-        )
+            out_category = nn.Dense(num_categories)(x)
+            out_category = jnp.where(
+                # disallow already filled categories
+                inputs[..., player_scorecard_idx] == 1,
+                -jnp.inf,
+                out_category,
+            )
 
-        def pad_action(logit, num_pad):
+            if keep_action_space < num_categories:
+                out_keep = Decide.pad_(out_keep, num_categories - keep_action_space)
+
+            elif keep_action_space > num_categories:
+                out_category = Decide.pad_(out_category, keep_action_space - num_categories)
+
+            out_action = jnp.where(rolls_left == 0, out_category, out_keep)
+
+            return out_action, jnp.squeeze(out_value, axis=-1)
+
+        @staticmethod
+        def pad_(logit, num_pad):
             pad_shape = [(0, 0)] * (logit.ndim - 1) + [(0, num_pad)]
             return jnp.pad(logit, pad_shape, constant_values=MINIMUM_LOGIT)
 
-        if keep_action_space < num_categories:
-            out_keep = pad_action(out_keep, num_categories - keep_action_space)
+    class Strategy(nn.Module):
+        def __call__(self, inputs):
+            player_scorecard_idx = slice(sum(input_groups[:2]), sum(input_groups[:3]))
+            init = nn.initializers.variance_scaling(2.0, "fan_in", "truncated_normal")
 
-        elif keep_action_space > num_categories:
-            out_category = pad_action(out_category, keep_action_space - num_categories)
+            x = nn.Dense(64, w_init=init)(inputs)
+            x = jax.nn.relu(x)
+            x = nn.Dense(128, w_init=init)(x)
+            x = jax.nn.relu(x)
+            x = nn.Dense(64, w_init=init)(x)
+            x = jax.nn.relu(x)
 
-        out_action = jnp.where(rolls_left == 0, out_category, out_keep)
+            out_category = nn.Dense(num_categories)(x)
+            out_category = jnp.where(
+                # disallow already filled categories
+                inputs[..., player_scorecard_idx] == 1,
+                MINIMUM_LOGIT,
+                out_category,
+            )
 
-        return out_action, jnp.squeeze(out_value, axis=-1)
+            return out_category
 
-    def strategy_network(inputs):
-        player_scorecard_idx = slice(sum(input_shapes[:2]), sum(input_shapes[:3]))
-        init = hk.initializers.VarianceScaling(2.0, "fan_in", "truncated_normal")
-
-        x = hk.Linear(64, w_init=init)(inputs)
-        x = jax.nn.relu(x)
-        x = hk.Linear(128, w_init=init)(x)
-        x = jax.nn.relu(x)
-        x = hk.Linear(64, w_init=init)(x)
-        x = jax.nn.relu(x)
-
-        out_category = hk.Linear(num_categories)(x)
-        out_category = jnp.where(
-            # disallow already filled categories
-            inputs[..., player_scorecard_idx] == 1,
-            MINIMUM_LOGIT,
-            out_category,
-        )
-
-        return out_category
-
-    forward = hk.without_apply_rng(hk.transform(network))
-    forward_strategy = hk.without_apply_rng(hk.transform(strategy_network))
+    forward = Decide()  #hk.without_apply_rng(hk.transform(network))
+    forward_strategy = Strategy()  #hk.without_apply_rng(hk.transform(strategy_network))
 
     return {
-        "input-shapes": input_shapes,
+        "input-shape": input_shape,
         "network": forward,
         "strategy-network": forward_strategy,
     }
@@ -133,7 +144,7 @@ def get_opponent_value(opponent_scorecards, network, weights):
         ],
         axis=0,
     )
-    _, opponent_values = network(weights, net_input)
+    _, opponent_values = network({'params': weights}, inputs=net_input)
     return np.max(opponent_values)
 
 
@@ -333,11 +344,11 @@ class Yahtzotron:
         if load_path is None:
             self._weights = networks["network"].init(
                 next(key),
-                jnp.ones((1, sum(networks["input-shapes"])), dtype=jnp.float32),
+                jnp.ones(networks["input-shape"], dtype=jnp.float32),
             )
             self._strategy_weights = networks["strategy-network"].init(
                 next(key),
-                jnp.ones((1, sum(networks["input-shapes"])), dtype=jnp.float32),
+                jnp.ones(networks["input-shape"], dtype=jnp.float32),
             )
 
     def explain(self, observation):
@@ -345,7 +356,7 @@ class Yahtzotron:
 
         This only makes sense if rolls_left > 0.
         """
-        cat_logits = self._strategy_network(self._strategy_weights, observation)
+        cat_logits = self._strategy_network({'params': self._strategy_weights}, inputs=observation)
         cat_prob = np.exp(cat_logits - cat_logits.max())
         cat_prob /= cat_prob.sum()
         return dict(sorted(enumerate(cat_prob), key=lambda k: k[1], reverse=True))
@@ -397,9 +408,14 @@ class Yahtzotron:
 
         return self._weights
 
+    @staticmethod
+    def to_immutable_dict_(new_weights):
+        params_flat, tree_def = jax.tree_util.tree_flatten(new_weights)
+        return jax.tree_util.tree_unflatten(tree_def, params_flat)
+
     def set_weights(self, new_weights, strategy=False):
         """Set current network weights."""
-        new_weights = hk.data_structures.to_immutable_dict(new_weights)
+        new_weights = Yahtzotron.to_immutable_dict(new_weights)
         if strategy:
             self._strategy_weights = new_weights
         else:
