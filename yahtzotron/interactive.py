@@ -3,6 +3,8 @@ import time
 import click
 import numpy as np
 
+from jax.random import PRNGKey
+
 from yahtzotron.agent import Yahtzotron
 from yahtzotron.game import Scorecard
 
@@ -89,8 +91,8 @@ def turn_player(player_scorecard):
     )
 
 
-def play_interactive(model_path):
-    yzt = Yahtzotron(load_path=model_path)
+def play_interactive(model_path, rngs: PRNGKey=None):
+    yzt = Yahtzotron(load_path=model_path, rngs=rngs)
 
     speak("Greetings.")
     speak("This is Yahtzotron.")
@@ -114,7 +116,7 @@ def play_interactive(model_path):
     def get_roll(current_dice):
         num_dice_to_roll = yzt._ruleset.num_dice - len(current_dice)
         if auto_rolls:
-            return [*current_dice, *np.random.randint(1, 7, size=num_dice_to_roll)]
+            return [*current_dice, *np.random.randint(1, 7, size=num_dice_to_roll)]  # TODO jax.random
 
         if num_dice_to_roll == 0:
             speak("All dice are kept.")

@@ -26,7 +26,6 @@ setup(
     install_requires=[
         "click",
         "numpy",
-        "numpyro",
         "loguru",
         "jax",
         "flax",

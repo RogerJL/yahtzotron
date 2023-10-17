@@ -121,8 +121,10 @@ def train_a2c(
     entropy_schedule=None,
     td_lambda_schedule=None,
     pretraining=False,
+    rngs=None,
 ):
     """Train advantage actor-critic (A2C) agent through self-play"""
+
     objective = base_agent._objective
 
     default_schedules = get_default_schedules(pretraining=pretraining)
@@ -151,15 +153,17 @@ def train_a2c(
 
     best_score = -float("inf")
 
+    rngs, rngs_greedy = jax.random.split(rngs)
+
     if pretraining:
-        greedy_agent = base_agent.clone()
-        greedy_agent._be_greedy = True
+        greedy_agent = base_agent.clone(greedy=True,rngs=rngs_greedy)
         agents = [greedy_agent] * players_per_game
     else:
         agents = [base_agent] * players_per_game
 
     for i in progress:
-        scores, trajectories = play_tournament(agents, record_trajectories=True)
+        rngs, rngs_i1 = jax.random.split(rngs)
+        scores, trajectories = play_tournament(agents, record_trajectories=True, rngs=rngs_i1)
 
         final_scores = [s.total_score() for s in scores]
         winner = np.argmax(final_scores)
@@ -239,7 +243,7 @@ def train_a2c(
     return base_agent
 
 
-def train_strategy(agent, num_epochs, players_per_game=4, learning_rate=1e-3):
+def train_strategy(agent, num_epochs, players_per_game=4, learning_rate=1e-3, rngs=None):
     """Train strategy net through supervised learning on observed final actions."""
     optimizer = optax.adam(learning_rate=learning_rate)
     opt_state = optimizer.init(agent.get_weights(strategy=True))
@@ -264,8 +268,9 @@ def train_strategy(agent, num_epochs, players_per_game=4, learning_rate=1e-3):
     progress = tqdm.tqdm(range(num_epochs), dynamic_ncols=True)
 
     for i in progress:
+        rngs, rngs1 = jax.random.split(rngs)
         _, trajectories = play_tournament(
-            [agent] * players_per_game, record_trajectories=True
+            [agent] * players_per_game, record_trajectories=True, rngs=rngs1
         )
 
         weights = agent.get_weights(strategy=True)

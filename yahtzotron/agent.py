@@ -6,18 +6,15 @@ from loguru import logger
 import numpy as np
 
 import jax
+from jax.random import PRNGKey
 import jax.numpy as jnp
 import flax.linen as nn
-
-import numpyro
 
 from .rulesets import AVAILABLE_RULESETS
 from .strategy import assemble_roll_lut
 
 module_key = __name__ + '$params'  # TODO: should module name be accepted?
-nn_params = numpyro.param(module_key, hash(module_key))
 
-key = numpyro.prng_key()  #hk.PRNGSequence(17)
 memoize = functools.lru_cache(maxsize=None)
 
 DISK_CACHE = os.path.expanduser(os.path.join("~", ".yahtzotron"))
@@ -49,13 +46,13 @@ def create_network(objective, num_dice, num_categories):
         def __call__(self, inputs):
             rolls_left = inputs[..., 0, None]
             player_scorecard_idx = slice(sum(input_groups[:2]), sum(input_groups[:3]))
-            init = nn.initializers.variance_scaling(2.0, "fan_in", "truncated_normal")
+            # init = nn.initializers.variance_scaling(2.0, "fan_in", "truncated_normal")
 
-            x = nn.Dense(128, w_init=init)(inputs)
+            x = nn.Dense(128)(inputs)
             x = jax.nn.relu(x)
-            x = nn.Dense(256, w_init=init)(x)
+            x = nn.Dense(256)(x)
             x = jax.nn.relu(x)
-            x = nn.Dense(128, w_init=init)(x)
+            x = nn.Dense(128)(x)
             x = jax.nn.relu(x)
 
             out_value = nn.Dense(1)(x)
@@ -86,15 +83,16 @@ def create_network(objective, num_dice, num_categories):
             return jnp.pad(logit, pad_shape, constant_values=MINIMUM_LOGIT)
 
     class Strategy(nn.Module):
+        @nn.compact
         def __call__(self, inputs):
             player_scorecard_idx = slice(sum(input_groups[:2]), sum(input_groups[:3]))
-            init = nn.initializers.variance_scaling(2.0, "fan_in", "truncated_normal")
+            # init = nn.initializers.variance_scaling(2.0, "fan_in", "truncated_normal")
 
-            x = nn.Dense(64, w_init=init)(inputs)
+            x = nn.Dense(64)(inputs)
             x = jax.nn.relu(x)
-            x = nn.Dense(128, w_init=init)(x)
+            x = nn.Dense(128)(x)
             x = jax.nn.relu(x)
-            x = nn.Dense(64, w_init=init)(x)
+            x = nn.Dense(64)(x)
             x = jax.nn.relu(x)
 
             out_category = nn.Dense(num_categories)(x)
@@ -144,7 +142,7 @@ def get_opponent_value(opponent_scorecards, network, weights):
         ],
         axis=0,
     )
-    _, opponent_values = network({'params': weights}, inputs=net_input)
+    _, opponent_values = network(weights, inputs=net_input)
     return np.max(opponent_values)
 
 
@@ -311,9 +309,13 @@ def get_action_greedy(rolls_left, current_dice, player_scorecard, roll_lut):
 
 
 class Yahtzotron:
-    def __init__(self, ruleset=None, load_path=None, objective="win", greedy=False):
+    def __init__(self, ruleset=None, load_path=None, rngs: PRNGKey=None, objective="win", greedy=False):
         if ruleset is None and load_path is None:
-            raise ValueError("ruleset must be given")
+            raise ValueError("Either ruleset or load_path must be given")
+
+        if rngs is None and not greedy:
+            raise ValueError("rngs must be given, all Models require it")
+        rngs, key1, key2 = jax.random.split(rngs, 3)
 
         possible_objectives = ("win", "avg_score")
         if objective not in possible_objectives:
@@ -343,12 +345,12 @@ class Yahtzotron:
 
         if load_path is None:
             self._weights = networks["network"].init(
-                next(key),
-                jnp.ones(networks["input-shape"], dtype=jnp.float32),
+                rngs=key1,
+                inputs=jnp.empty(networks["input-shape"], dtype=jnp.float32),
             )
             self._strategy_weights = networks["strategy-network"].init(
-                next(key),
-                jnp.ones(networks["input-shape"], dtype=jnp.float32),
+                rngs=key2,
+                inputs=jnp.empty(networks["input-shape"], dtype=jnp.float32),
             )
 
     def explain(self, observation):
@@ -356,7 +358,7 @@ class Yahtzotron:
 
         This only makes sense if rolls_left > 0.
         """
-        cat_logits = self._strategy_network({'params': self._strategy_weights}, inputs=observation)
+        cat_logits = self._strategy_network(self._strategy_weights, inputs=observation)
         cat_prob = np.exp(cat_logits - cat_logits.max())
         cat_prob /= cat_prob.sum()
         return dict(sorted(enumerate(cat_prob), key=lambda k: k[1], reverse=True))
@@ -415,15 +417,15 @@ class Yahtzotron:
 
     def set_weights(self, new_weights, strategy=False):
         """Set current network weights."""
-        new_weights = Yahtzotron.to_immutable_dict(new_weights)
+        new_weights = Yahtzotron.to_immutable_dict_(new_weights)
         if strategy:
             self._strategy_weights = new_weights
         else:
             self._weights = new_weights
 
-    def clone(self, keep_weights=True):
+    def clone(self, rngs=None, keep_weights=True, greedy=False):
         """Create a copy of the current agent."""
-        yzt = self.__class__(ruleset=self._ruleset.name, objective=self._objective)
+        yzt = self.__class__(ruleset=self._ruleset.name, rngs=rngs, objective=self._objective, greedy=greedy)
 
         if keep_weights:
             yzt.set_weights(self.get_weights())

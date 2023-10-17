@@ -1,4 +1,6 @@
 import numpy as np
+import jax.random
+from jax.random import PRNGKey
 
 
 class Scorecard:
@@ -50,7 +52,7 @@ class Scorecard:
         )
 
 
-def play_tournament(agents, deterministic_rolls=False, record_trajectories=False):
+def play_tournament(agents, deterministic_rolls=False, record_trajectories=False, rngs: PRNGKey=None):
     """Play a tournament between given agents.
 
     Returns either final scores or final scores and all trajectories
@@ -75,12 +77,14 @@ def play_tournament(agents, deterministic_rolls=False, record_trajectories=False
         trajectories = [[] for _ in range(num_players)]
 
     for _ in range(ruleset.num_rounds):
+        rngs, rngs1 = jax.random.split(rngs)
         if deterministic_rolls:
-            player_rolls = np.tile(
-                np.random.randint(1, 7, size=(1, 3, num_dice)), (num_players, 1, 1)
+            player_rolls = (np.tile(
+                jax.random.randint(rngs1, shape=(1, 3, num_dice), minval=1, maxval=7),
+                (num_players, 1, 1))
             )
         else:
-            player_rolls = np.random.randint(1, 7, size=(num_players, 3, num_dice))
+            player_rolls = jax.random.randint(rngs1, shape=(num_players, 3, num_dice), minval=1, maxval=7)
 
         for p in range(num_players):
             my_score = scores[p]

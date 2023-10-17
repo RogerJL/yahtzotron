@@ -9,6 +9,8 @@ import sys
 import math
 
 import click
+import jax.random
+from jax.random import PRNGKey
 from loguru import logger
 
 from yahtzotron import __version__
@@ -64,13 +66,17 @@ def train(out, ruleset, num_epochs, no_restore, objective):
     if os.path.exists(out) and not no_restore:
         load_path = out
 
-    yzt = Yahtzotron(ruleset=ruleset, objective=objective, load_path=load_path)
+    seed = 17  # TODO improve seed
+    rngs = jax.random.PRNGKey(seed)
+    rngs, rngs_yzt, rngs_pre, rngs_a2c, rngs_strategy = jax.random.split(rngs, 5)
+
+    yzt = Yahtzotron(ruleset=ruleset, objective=objective, load_path=load_path, rngs=rngs_yzt)
 
     if load_path is None:
-        yzt = train_a2c(yzt, num_epochs=20_000, pretraining=True)
+        yzt = train_a2c(yzt, num_epochs=20_000, pretraining=True, rngs=rngs_pre)
 
-    yzt = train_a2c(yzt, num_epochs=num_epochs, checkpoint_path=out)
-    yzt = train_strategy(yzt, num_epochs=10_000)
+    yzt = train_a2c(yzt, num_epochs=num_epochs, checkpoint_path=out, rngs=rngs_a2c)
+    yzt = train_strategy(yzt, num_epochs=10_000, rngs=rngs_strategy)
     yzt.save(out)
 
 
@@ -80,7 +86,10 @@ def play(model_path):
     """Play a game against Yahtzotron."""
     from yahtzotron.interactive import play_interactive
 
-    play_interactive(model_path)
+    seed = 17  # TODO improve seed
+    rngs = jax.random.PRNGKey(seed)
+
+    play_interactive(model_path, rngs=rngs)
 
 
 @cli.command("evaluate")
@@ -90,7 +99,7 @@ def play(model_path):
     "--ruleset", type=click.Choice(list(AVAILABLE_RULESETS.keys())), default="yatzy"
 )
 @click.option("--deterministic-rolls", is_flag=True, default=False)
-def evaluate(agents, num_rounds, ruleset, deterministic_rolls):
+def evaluate(agents, num_rounds, ruleset, deterministic_rolls, rngs: PRNGKey=None):
     """Evaluate performance of trained agents."""
     import tqdm
     import numpy as np
@@ -98,14 +107,15 @@ def evaluate(agents, num_rounds, ruleset, deterministic_rolls):
     from yahtzotron.game import play_tournament
     from yahtzotron.agent import Yahtzotron
 
-    def create_agent(agent_id):
+    def create_agent(agent_id, rngs: PRNGKey):
+        # only one of the Yahtzotrons gets created, can use same rngs
         if agent_id == "random":
-            return Yahtzotron(ruleset)
+            return Yahtzotron(ruleset, rngs=rngs)
 
         if agent_id == "greedy":
-            return Yahtzotron(ruleset, greedy=True)
+            return Yahtzotron(ruleset, greedy=True, rngs=rngs)
 
-        agent = Yahtzotron(load_path=agent_id)
+        agent = Yahtzotron(load_path=agent_id, rngs=rngs)
         got_ruleset = agent._ruleset.name
         if got_ruleset != ruleset:
             raise ValueError(
@@ -117,13 +127,13 @@ def evaluate(agents, num_rounds, ruleset, deterministic_rolls):
 
     scores_per_agent = [[] for _ in agents]
     rank_per_agent = [[] for _ in agents]
-
     try:
         progress = tqdm.tqdm(range(num_rounds))
         for _ in progress:
-            agent_obj = [create_agent(agent_id) for agent_id in agents]
+            rngs, rngs1, rngs2 = jax.random.split(rngs, 3)
+            agent_obj = [create_agent(agent_id, rngs=rngs1) for agent_id in agents]
             scorecards = play_tournament(
-                agent_obj, deterministic_rolls=deterministic_rolls
+                agent_obj, deterministic_rolls=deterministic_rolls, rngs=rngs2,
             )
             total_scores = [s.total_score() for s in scorecards]
             sorted_scores = sorted(total_scores, reverse=True)
