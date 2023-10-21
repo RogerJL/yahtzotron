@@ -7,6 +7,7 @@ Entry point for CLI.
 import os
 import sys
 import math
+import time
 
 import click
 import jax.random
@@ -66,8 +67,7 @@ def train(out, ruleset, num_epochs, no_restore, objective):
     if os.path.exists(out) and not no_restore:
         load_path = out
 
-    seed = 17  # TODO improve seed
-    rngs = jax.random.PRNGKey(seed)
+    rngs = jax.random.PRNGKey(seed=time.time_ns())
     rngs, rngs_yzt, rngs_pre, rngs_a2c, rngs_strategy = jax.random.split(rngs, 5)
 
     yzt = Yahtzotron(ruleset=ruleset, objective=objective, load_path=load_path, rngs=rngs_yzt)
@@ -86,8 +86,7 @@ def play(model_path):
     """Play a game against Yahtzotron."""
     from yahtzotron.interactive import play_interactive
 
-    seed = 17  # TODO improve seed
-    rngs = jax.random.PRNGKey(seed)
+    rngs = jax.random.PRNGKey(seed=time.time_ns())
 
     play_interactive(model_path, rngs=rngs)
 
@@ -99,7 +98,7 @@ def play(model_path):
     "--ruleset", type=click.Choice(list(AVAILABLE_RULESETS.keys())), default="yatzy"
 )
 @click.option("--deterministic-rolls", is_flag=True, default=False)
-def evaluate(agents, num_rounds, ruleset, deterministic_rolls, rngs: PRNGKey=None):
+def evaluate(agents, num_rounds, ruleset, deterministic_rolls):
     """Evaluate performance of trained agents."""
     import tqdm
     import numpy as np
@@ -127,6 +126,7 @@ def evaluate(agents, num_rounds, ruleset, deterministic_rolls, rngs: PRNGKey=Non
 
     scores_per_agent = [[] for _ in agents]
     rank_per_agent = [[] for _ in agents]
+    rngs = jax.random.PRNGKey(seed=time.time_ns())
     try:
         progress = tqdm.tqdm(range(num_rounds))
         for _ in progress:
@@ -141,7 +141,7 @@ def evaluate(agents, num_rounds, ruleset, deterministic_rolls, rngs: PRNGKey=Non
             for i, score in enumerate(total_scores):
                 scores_per_agent[i].append(score)
                 # use .index to handle ties correctly
-                rank_per_agent[i].append(sorted_scores.index(score) + 1)
+                rank_per_agent[i].append(sorted_scores.index(score) + 1)  # possible with split 1st places
 
     except KeyboardInterrupt:
         pass

@@ -13,6 +13,14 @@ import flax.linen as nn
 from .rulesets import AVAILABLE_RULESETS
 from .strategy import assemble_roll_lut
 
+TRANSLATE_FROM_ORIGINAL_DECIDE = {'linear': 'Dense_0',
+                     'linear_1': 'Dense_1',
+                     'linear_2': 'Dense_2',
+                     'linear_3': 'Value',
+                     'linear_4': 'Keep',
+                     'linear_5': 'Category'}
+TRANSLATE_FROM_ORIGINAL_STRATEGY = {'linear_3': 'Categories'}
+
 module_key = __name__ + '$params'  # TODO: should module name be accepted?
 
 memoize = functools.lru_cache(maxsize=None)
@@ -55,11 +63,11 @@ def create_network(objective, num_dice, num_categories):
             x = nn.Dense(128)(x)
             x = jax.nn.relu(x)
 
-            out_value = nn.Dense(1)(x)
+            out_value = nn.Dense(1, name="Value")(x)
 
-            out_keep = nn.Dense(keep_action_space)(x)
+            out_keep = nn.Dense(keep_action_space, name="Keep")(x)
 
-            out_category = nn.Dense(num_categories)(x)
+            out_category = nn.Dense(num_categories, name="Category")(x)
             out_category = jnp.where(
                 # disallow already filled categories
                 inputs[..., player_scorecard_idx] == 1,
@@ -95,7 +103,7 @@ def create_network(objective, num_dice, num_categories):
             x = nn.Dense(64)(x)
             x = jax.nn.relu(x)
 
-            out_category = nn.Dense(num_categories)(x)
+            out_category = nn.Dense(num_categories, name="Categories")(x)
             out_category = jnp.where(
                 # disallow already filled categories
                 inputs[..., player_scorecard_idx] == 1,
@@ -453,8 +461,36 @@ class Yahtzotron:
 
         self._objective = statedict["objective"]
         self._ruleset = AVAILABLE_RULESETS[statedict["ruleset"]]
-        self._weights = statedict["weights"]
-        self._strategy_weights = statedict["strategy_weights"]
+        self._weights = Yahtzotron.translate_weights(statedict["weights"],
+                                                     translation=TRANSLATE_FROM_ORIGINAL_DECIDE)
+        self._strategy_weights = Yahtzotron.translate_weights(statedict["strategy_weights"],
+                                                              translation=TRANSLATE_FROM_ORIGINAL_STRATEGY)
+
+    @staticmethod
+    def translate_weights(weights, translation=dict()):
+        if 'params' in weights:
+            if 'Dense_5' in weights['params']:
+                # TODO: remove, when all stored use new format
+                return {'params': Yahtzotron.translate_parameters({'Dense_3': 'Value',
+                                                                   'Dense_4': 'Keep',
+                                                                   'Dense_5': 'Category'},
+                                                                  weights['params'])}
+            if 'Dense_3' in weights['params']:
+                # TODO: remove, when all stored use new format (this is Strategy)
+                return {'params': Yahtzotron.translate_parameters({'Dense_3': 'Categories'},
+                                                                  weights['params'])}
+            return weights
+        return {'params': Yahtzotron.translate_parameters(translation,
+                                                          weights)}
+    @staticmethod
+    def translate_parameters(lookup, weights):
+        if not isinstance(weights, dict):
+            return weights
+        params = dict()
+        for name, value in weights.items():
+            params[lookup.get(name, name)] = Yahtzotron.translate_parameters({'b': 'bias', 'w': 'kernel'},
+                                                                             value)
+        return params
 
     def __repr__(self):
         return f"{self.__class__.__name__}(ruleset={self._ruleset}, objective={self._objective})"
