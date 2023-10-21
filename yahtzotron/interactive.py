@@ -91,7 +91,7 @@ def turn_player(player_scorecard):
     )
 
 
-def play_interactive(model_path, rngs: PRNGKey=None):
+def play_interactive(model_path, rngs: PRNGKey = None):
     yzt = Yahtzotron(load_path=model_path, rngs=rngs)
 
     speak("Greetings.")
@@ -114,7 +114,7 @@ def play_interactive(model_path, rngs: PRNGKey=None):
     auto_rolls = speak("Do you want me to roll the dice for you?", action="confirm")
 
     def get_roll(current_dice):
-        num_dice_to_roll = yzt._ruleset.num_dice - len(current_dice)
+        num_dice_to_roll = yzt.ruleset().num_dice - len(current_dice)
         if auto_rolls:
             return [*current_dice, *np.random.randint(1, 7, size=num_dice_to_roll)]  # TODO jax.random
 
@@ -133,16 +133,16 @@ def play_interactive(model_path, rngs: PRNGKey=None):
 
             speak(f"I need {num_dice_to_roll} numbers from you. Try again.")
 
-    scorecards = [Scorecard(yzt._ruleset) for _ in range(num_players + 1)]
+    scorecards = [Scorecard(yzt.ruleset()) for _ in range(num_players + 1)]
 
-    categories = yzt._ruleset.categories
+    categories = yzt.ruleset().categories
     category_names = [cat.name.replace("_", " ").title() for cat in categories]
 
     def _print_scores():
         align = lambda string: f"{string:<30}"
         score_str = [print_score(s).split("\n") for s in scorecards]
         heading_str = (
-            "".join([align(f" Player {n+1}'s score") for n in range(num_players)])
+            "".join([align(f" Player {player+1}'s score") for player in range(num_players)])
             + " Yahtzotron's score"
         )
         click.echo("")
@@ -150,10 +150,10 @@ def play_interactive(model_path, rngs: PRNGKey=None):
         for line in zip(*score_str):
             click.echo(" " + "".join([align(s) for s in line]))
 
-    for i_round in range(yzt._ruleset.num_rounds):
+    for i_round in range(yzt.ruleset().num_rounds):
         click.echo("")
         click.echo(" " + "=" * 12)
-        click.echo(f" Round {i_round+1} / {yzt._ruleset.num_rounds}")
+        click.echo(f" Round {i_round+1} / {yzt.ruleset().num_rounds}")
         click.echo(" " + "=" * 12)
 
         _print_scores()

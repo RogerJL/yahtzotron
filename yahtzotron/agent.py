@@ -14,11 +14,11 @@ from .rulesets import AVAILABLE_RULESETS
 from .strategy import assemble_roll_lut
 
 TRANSLATE_FROM_ORIGINAL_DECIDE = {'linear': 'Dense_0',
-                     'linear_1': 'Dense_1',
-                     'linear_2': 'Dense_2',
-                     'linear_3': 'Value',
-                     'linear_4': 'Keep',
-                     'linear_5': 'Category'}
+                                  'linear_1': 'Dense_1',
+                                  'linear_2': 'Dense_2',
+                                  'linear_3': 'Value',
+                                  'linear_4': 'Keep',
+                                  'linear_5': 'Category'}
 TRANSLATE_FROM_ORIGINAL_STRATEGY = {'linear_3': 'Categories'}
 
 module_key = __name__ + '$params'  # TODO: should module name be accepted?
@@ -113,8 +113,8 @@ def create_network(objective, num_dice, num_categories):
 
             return out_category
 
-    forward = Decide()  #hk.without_apply_rng(hk.transform(network))
-    forward_strategy = Strategy()  #hk.without_apply_rng(hk.transform(strategy_network))
+    forward = Decide()
+    forward_strategy = Strategy()
 
     return {
         "input-shape": input_shape,
@@ -317,7 +317,7 @@ def get_action_greedy(rolls_left, current_dice, player_scorecard, roll_lut):
 
 
 class Yahtzotron:
-    def __init__(self, ruleset=None, load_path=None, rngs: PRNGKey=None, objective="win", greedy=False):
+    def __init__(self, ruleset=None, load_path=None, rngs: PRNGKey = None, objective="win", greedy=False):
         if ruleset is None and load_path is None:
             raise ValueError("Either ruleset or load_path must be given")
 
@@ -361,6 +361,18 @@ class Yahtzotron:
                 inputs=jnp.empty(networks["input-shape"], dtype=jnp.float32),
             )
 
+    def ruleset(self):
+        return self._ruleset
+
+    def compiled_network(self):
+        return self._network
+
+    def is_objective_winning(self):
+        return self._objective == "win"
+
+    def compiled_strategy_network(self, weights, observation):
+        return self._strategy_network(weights, inputs=observation)
+
     def explain(self, observation):
         """Return the estimated probability for each final category action.
 
@@ -383,7 +395,7 @@ class Yahtzotron:
 
         Opponent scorecards only have meaning if the objective is "win".
         """
-        if self._objective == "win":
+        if self.is_objective_winning():
             if opponent_scorecards is None or (
                 hasattr(opponent_scorecards, "__iter__")
                 and len(opponent_scorecards) == 0
@@ -418,11 +430,6 @@ class Yahtzotron:
 
         return self._weights
 
-    @staticmethod
-    def to_immutable_dict_(new_weights):
-        params_flat, tree_def = jax.tree_util.tree_flatten(new_weights)
-        return jax.tree_util.tree_unflatten(tree_def, params_flat)
-
     def set_weights(self, new_weights, strategy=False):
         """Set current network weights."""
         new_weights = Yahtzotron.to_immutable_dict_(new_weights)
@@ -430,6 +437,11 @@ class Yahtzotron:
             self._strategy_weights = new_weights
         else:
             self._weights = new_weights
+
+    @staticmethod
+    def to_immutable_dict_(new_weights):
+        params_flat, tree_def = jax.tree_util.tree_flatten(new_weights)
+        return jax.tree_util.tree_unflatten(tree_def, params_flat)
 
     def clone(self, rngs=None, keep_weights=True, greedy=False):
         """Create a copy of the current agent."""
@@ -461,35 +473,28 @@ class Yahtzotron:
 
         self._objective = statedict["objective"]
         self._ruleset = AVAILABLE_RULESETS[statedict["ruleset"]]
-        self._weights = Yahtzotron.translate_weights(statedict["weights"],
-                                                     translation=TRANSLATE_FROM_ORIGINAL_DECIDE)
-        self._strategy_weights = Yahtzotron.translate_weights(statedict["strategy_weights"],
-                                                              translation=TRANSLATE_FROM_ORIGINAL_STRATEGY)
+        self._weights = Yahtzotron._translate_weights(statedict["weights"],
+                                                      translation=TRANSLATE_FROM_ORIGINAL_DECIDE)
+        self._strategy_weights = Yahtzotron._translate_weights(statedict["strategy_weights"],
+                                                               translation=TRANSLATE_FROM_ORIGINAL_STRATEGY)
 
     @staticmethod
-    def translate_weights(weights, translation=dict()):
+    def _translate_weights(weights, translation=None):
+        if translation is None:
+            translation = dict()
         if 'params' in weights:
-            if 'Dense_5' in weights['params']:
-                # TODO: remove, when all stored use new format
-                return {'params': Yahtzotron.translate_parameters({'Dense_3': 'Value',
-                                                                   'Dense_4': 'Keep',
-                                                                   'Dense_5': 'Category'},
-                                                                  weights['params'])}
-            if 'Dense_3' in weights['params']:
-                # TODO: remove, when all stored use new format (this is Strategy)
-                return {'params': Yahtzotron.translate_parameters({'Dense_3': 'Categories'},
-                                                                  weights['params'])}
             return weights
-        return {'params': Yahtzotron.translate_parameters(translation,
-                                                          weights)}
+        return {'params': Yahtzotron._translate_parameters(translation,
+                                                           weights)}
+
     @staticmethod
-    def translate_parameters(lookup, weights):
+    def _translate_parameters(lookup, weights):
         if not isinstance(weights, dict):
             return weights
         params = dict()
         for name, value in weights.items():
-            params[lookup.get(name, name)] = Yahtzotron.translate_parameters({'b': 'bias', 'w': 'kernel'},
-                                                                             value)
+            params[lookup.get(name, name)] = Yahtzotron._translate_parameters({'b': 'bias', 'w': 'kernel'},
+                                                                              value)
         return params
 
     def __repr__(self):

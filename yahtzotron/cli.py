@@ -107,7 +107,7 @@ def evaluate(agents, num_rounds, ruleset, deterministic_rolls):
     from yahtzotron.agent import Yahtzotron
 
     def create_agent(agent_id, rngs: PRNGKey):
-        # only one of the Yahtzotrons gets created, can use same rngs
+        # only one of the Yahtzotrons gets created, can use same rngs_
         if agent_id == "random":
             return Yahtzotron(ruleset, rngs=rngs)
 
@@ -115,7 +115,7 @@ def evaluate(agents, num_rounds, ruleset, deterministic_rolls):
             return Yahtzotron(ruleset, greedy=True, rngs=rngs)
 
         agent = Yahtzotron(load_path=agent_id, rngs=rngs)
-        got_ruleset = agent._ruleset.name
+        got_ruleset = agent.ruleset().name
         if got_ruleset != ruleset:
             raise ValueError(
                 f"Got unexpected ruleset for loaded agent {agent_id}: {got_ruleset}. "
@@ -125,12 +125,12 @@ def evaluate(agents, num_rounds, ruleset, deterministic_rolls):
         return agent
 
     scores_per_agent = [[] for _ in agents]
-    rank_per_agent = [[] for _ in agents]
-    rngs = jax.random.PRNGKey(seed=time.time_ns())
+    rank_per_agent: list[list[int]] = [[] for _ in agents]
+    rngs_ = jax.random.PRNGKey(seed=time.time_ns())
     try:
         progress = tqdm.tqdm(range(num_rounds))
         for _ in progress:
-            rngs, rngs1, rngs2 = jax.random.split(rngs, 3)
+            rngs_, rngs1, rngs2 = jax.random.split(rngs_, 3)
             agent_obj = [create_agent(agent_id, rngs=rngs1) for agent_id in agents]
             scorecards = play_tournament(
                 agent_obj, deterministic_rolls=deterministic_rolls, rngs=rngs2,
@@ -151,8 +151,7 @@ def evaluate(agents, num_rounds, ruleset, deterministic_rolls):
         agent_ranks = np.asarray(rank_per_agent[i])
         agent_rank_count = dict(zip(*np.unique(agent_ranks, return_counts=True)))
 
-        summary = []
-        summary.append(f"Agent #{i+1} ({agent_id})")
+        summary = [f"Agent #{i+1} ({agent_id})"]
         summary.append("-" * len(summary[-1]))
         summary.extend(
             [

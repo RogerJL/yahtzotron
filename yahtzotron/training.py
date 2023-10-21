@@ -74,6 +74,8 @@ def compile_loss_function(type_, network):
             )
         elif type_ == "supervised":
             actor_loss = jnp.mean(cross_entropy(logits, actions))
+        else:
+            raise ValueError(f"Type {type_} is unsupported")
 
         entropy_loss = -jnp.mean(entropy(logits))
 
@@ -125,7 +127,7 @@ def train_a2c(
 ):
     """Train advantage actor-critic (A2C) agent through self-play"""
 
-    objective = base_agent._objective
+    objective_win = base_agent.is_objective_winning()
 
     default_schedules = get_default_schedules(pretraining=pretraining)
 
@@ -148,7 +150,7 @@ def train_a2c(
     progress = tqdm.tqdm(range(num_epochs), dynamic_ncols=True)
 
     loss_type = "supervised" if pretraining else "a2c"
-    loss_fn = compile_loss_function(loss_type, base_agent._network)
+    loss_fn = compile_loss_function(loss_type, base_agent.compiled_network())
     sgd_step = compile_sgd_step(loss_fn, optimizer)
 
     best_score = -float("inf")
@@ -156,7 +158,7 @@ def train_a2c(
     rngs, rngs_greedy = jax.random.split(rngs)
 
     if pretraining:
-        greedy_agent = base_agent.clone(greedy=True,rngs=rngs_greedy)
+        greedy_agent = base_agent.clone(greedy=True, rngs=rngs_greedy)
         agents = [greedy_agent] * players_per_game
     else:
         agents = [base_agent] * players_per_game
@@ -178,7 +180,7 @@ def train_a2c(
             print_score(scores[winner]),
         )
 
-        weights = base_agent._weights
+        weights = base_agent.get_weights()
         loss_kwargs = dict(
             entropy_cost=entropy_schedule(i), td_lambda=td_lambda_schedule(i)
         )
@@ -195,7 +197,7 @@ def train_a2c(
             logger.debug(" actions {}: {}", p, actions)
             logger.debug(" rewards {}: {}", p, rewards)
 
-            if objective == "win" and p == winner:
+            if objective_win and p == winner:
                 rewards[-1] += WINNING_REWARD / REWARD_NORM
 
             weights, opt_state = sgd_step(
@@ -251,16 +253,16 @@ def train_strategy(agent, num_epochs, players_per_game=4, learning_rate=1e-3, rn
     num_rolls = 3
 
     @jax.jit
-    def loss_fn(weights, observation, action, *args):
-        loss = jnp.zeros(1)
+    def loss_fn(weights, observation, action, *args):  # *args needed to catch additional arguments
+        loss_ = jnp.zeros(1)
 
-        final_actions = action[num_rolls - 1 :: num_rolls]
+        final_actions = action[(num_rolls - 1)::num_rolls]
 
         for i_roll in range(num_rolls - 1):
-            logits = agent._strategy_network(weights, observation[i_roll::num_rolls])
-            loss = loss + jnp.mean(cross_entropy(logits, final_actions))
+            logits = agent.compiled_strategy_network(weights, observation[i_roll::num_rolls])
+            loss_ = loss_ + jnp.mean(cross_entropy(logits, final_actions))
 
-        return loss
+        return loss_
 
     sgd_step = compile_sgd_step(loss_fn, optimizer)
     running_loss = deque(maxlen=1000)
@@ -273,7 +275,7 @@ def train_strategy(agent, num_epochs, players_per_game=4, learning_rate=1e-3, rn
             [agent] * players_per_game, record_trajectories=True, rngs=rngs1
         )
 
-        weights = agent.get_weights(strategy=True)
+        weights_ = agent.get_weights(strategy=True)
 
         for p in range(players_per_game):
             observations, actions, _ = zip(*trajectories[p])
@@ -288,22 +290,22 @@ def train_strategy(agent, num_epochs, players_per_game=4, learning_rate=1e-3, rn
             logger.debug(" observations {}: {}", p, observations)
             logger.debug(" actions {}: {}", p, actions)
 
-            weights, opt_state = sgd_step(
-                weights,
+            weights_, opt_state = sgd_step(
+                weights_,
                 opt_state,
                 observations,
                 actions,
                 None,
             )
 
-            loss = float(loss_fn(weights, observations, actions))
+            loss = float(loss_fn(weights_, observations, actions))
 
             if len(running_loss) == running_loss.maxlen:
                 running_loss.popleft()
 
             running_loss.append(loss)
 
-        agent.set_weights(weights, strategy=True)
+        agent.set_weights(weights_, strategy=True)
 
         if i % 10 == 0:
             progress.set_postfix(dict(loss=np.mean(running_loss)))

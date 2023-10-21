@@ -48,7 +48,7 @@ class Ruleset:
     def total_score(self, scores):
         return scores.sum() + self.bonus_value(scores)
 
-    def score_summary(self, scores):
+    def score_summary(self, scores: list[int]):
         upper_score = 0
         lower_score = 0
 

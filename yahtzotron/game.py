@@ -36,7 +36,7 @@ class Scorecard:
     def score_summary(self):
         return np.array(self.ruleset_.score_summary(self.scores))
 
-    def total_score(self):
+    def total_score(self) -> int:
         return self.ruleset_.total_score(self.scores)
 
     def to_array(self):
@@ -52,7 +52,7 @@ class Scorecard:
         )
 
 
-def play_tournament(agents, deterministic_rolls=False, record_trajectories=False, rngs: PRNGKey=None):
+def play_tournament(agents, deterministic_rolls=False, record_trajectories=False, rngs: PRNGKey = None):
     """Play a tournament between given agents.
 
     Returns either final scores or final scores and all trajectories
@@ -64,17 +64,17 @@ def play_tournament(agents, deterministic_rolls=False, record_trajectories=False
 
     num_players = len(agents)
 
-    ruleset = agents[0]._ruleset
+    ruleset = agents[0].ruleset()
     for a in agents:
-        if a._ruleset != ruleset:
+        if a.ruleset() != ruleset:
             raise ValueError("Only agents sharing the same ruleset can play each other")
 
     num_dice = ruleset.num_dice
 
     scores = [Scorecard(ruleset) for _ in range(num_players)]
 
-    if record_trajectories:
-        trajectories = [[] for _ in range(num_players)]
+    # initialize even when not used
+    trajectories = [[] for _ in range(num_players)]
 
     for _ in range(ruleset.num_rounds):
         rngs, rngs1 = jax.random.split(rngs)
