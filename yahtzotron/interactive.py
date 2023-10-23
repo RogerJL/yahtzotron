@@ -257,17 +257,18 @@ def print_score(scorecard):
         )
         out.append(line)
 
-    out.append(separator_line)
-    out.append(
-        "".join(
-            [
-                align(" Bonus"),
-                "| ",
-                str(scorecard.ruleset_.bonus_value(scorecard.scores)),
-            ]
+    if scorecard.ruleset_.has_bonus():
+        out.append(separator_line)
+        out.append(
+            "".join(
+                [
+                    align(" Bonus"),
+                    "| ",
+                    str(scorecard.ruleset_.bonus_value(scorecard.scores)),
+                ]
+            )
         )
-    )
-    out.append(separator_line)
+        out.append(separator_line)
 
     for i, cat in enumerate(scorecard.ruleset_.categories):
         if cat.counts_towards_bonus:

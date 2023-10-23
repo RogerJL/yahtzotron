@@ -68,5 +68,8 @@ class Ruleset:
 
         return 0
 
+    def has_bonus(self):
+        return self.bonus_score_ > 0
+
     def __repr__(self):
         return f"{self.__class__.__name__}(ruleset_name={self.name})"

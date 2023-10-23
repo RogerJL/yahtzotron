@@ -2,13 +2,20 @@
 
 > State your prime directive! - "... to ... roll ..." 🤖 🎲
 
-Yahtzotron is a bot for [Yahtzee](https://en.wikipedia.org/wiki/Yahtzee) and [Yatzy](https://en.wikipedia.org/wiki/Yatzy), trained via advantage actor-critic (A2C) through self-play. Yahtzotron is implemented through the JAX library ecosystem ([JAX](https://github.com/google/jax) + [Haiku](https://github.com/deepmind/dm-haiku) + [optax](https://github.com/deepmind/optax) + [rlax](https://github.com/deepmind/rlax)).
+Yahtzotron2 is a bot for [Yahtzee](https://en.wikipedia.org/wiki/Yahtzee), [Yatzy](https://en.wikipedia.org/wiki/Yatzy), and Child Yatzy (sv: Barn Yatzy), trained via advantage actor-critic (A2C) through self-play. Yahtzotron2 is built from Yahtzotron implemented through the JAX library ecosystem ([JAX](https://github.com/google/jax) + [flax](https://github.com/deepmind/dm-haiku) + [optax](https://github.com/deepmind/optax) + [rlax](https://github.com/deepmind/rlax)).
 
 Yahtzee is a game of chance played with 5 dice and involves making strategic decisions based on the outcome of your rolls early in the game. This makes for a surprisingly challenging task for reinforcement learning.
 
 The pre-trained agents are close to perfect play (average scores are around 240 for both Yahtzee and Yatzy, just 5-10 points below perfect play).
 
 [Read my blog post about the making of Yahtzotron here.](https://dionhaefner.github.io/2021/04/yahtzotron-learning-to-play-yahtzee-with-advantage-actor-critic/)
+
+### New: Child Yatzy
+Child Yatzy does not use numbered dice faces but rather figures (like Moomin characters).
+
+Some rule changes are thus:
+* 1-6: only count number of faces with no Bonus
+* rest: always give the same scores when matching
 
 ## Usage
 
