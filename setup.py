@@ -10,13 +10,15 @@ with open(path.join(here, "README.md"), encoding="utf-8") as f:
 
 setup(
     # metadata
-    name="yahtzotron",
+    name="yahtzotron2",
     description="Beats you in Yahtzee.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/dionhaefner/yahtzotron",
+    url="https://https://github.com/RogerJL/yahtzotron2",
     author="Dion Häfner",
     author_email="mail@dionhaefner.de",
+    maintainer="Roger Larsson",
+    maintainer_email="roger.larsson@slentelit.se",
     # module
     packages=find_packages(exclude=["docs", "tests"]),
     python_requires=">=3.6",
