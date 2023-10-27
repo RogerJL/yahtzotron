@@ -63,6 +63,8 @@ def compile_loss_function(type_, network):
             v_t=values[1:],
             lambda_=td_lambda,
         )
+        # or declare environment variable JAX_DISABLE_JIT=True to make standard debug work
+        # jax.debug.print("td_errors={}\ntarget_tm1={}", td_errors, td_errors + values[:-1])
         critic_loss = jnp.mean(td_errors ** 2)
 
         if type_ == "a2c":
@@ -186,6 +188,12 @@ def train_a2c(
         )
 
         for p in range(players_per_game):
+            # observations[0] throws left
+            # observations[1:6] dice with face 1..6
+            # observations[7:21] scorecard category used
+            # observations[22] scorecard sum, counting toward bonus (upper)
+            # observations[23] scorecard sum (lower part)
+            # observations[24] estimated opponent value
             observations, actions, rewards = zip(*trajectories[p])
             assert sum(rewards) == scores[p].total_score()
 
@@ -216,6 +224,7 @@ def train_a2c(
                 loss=sum(loss_components),
                 score=scores[p].total_score(),
             )
+            logger.info("epoch_stats {}", epoch_stats)
             for key, val in epoch_stats.items():
                 buf = running_stats[key]
                 if len(buf) == buf.maxlen:
@@ -233,6 +242,7 @@ def train_a2c(
                 best_score = avg_score
 
                 if checkpoint_path is not None:
+                    print()  # new line for logger message
                     logger.warning(
                         " Saving checkpoint for average score {:.2f}", avg_score
                     )

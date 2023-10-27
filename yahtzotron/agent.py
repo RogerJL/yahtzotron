@@ -54,13 +54,13 @@ def create_network(objective, num_dice, num_categories):
         def __call__(self, inputs):
             rolls_left = inputs[..., 0, None]
             player_scorecard_idx = slice(sum(input_groups[:2]), sum(input_groups[:3]))
-            # init = nn.initializers.variance_scaling(2.0, "fan_in", "truncated_normal")
+            init = jax.nn.initializers.variance_scaling(2.0, "fan_in", "truncated_normal")
 
-            x = nn.Dense(128)(inputs)
+            x = nn.Dense(128, kernel_init=init)(inputs)
             x = jax.nn.relu(x)
-            x = nn.Dense(256)(x)
+            x = nn.Dense(256, kernel_init=init)(x)
             x = jax.nn.relu(x)
-            x = nn.Dense(128)(x)
+            x = nn.Dense(128, kernel_init=init)(x)
             x = jax.nn.relu(x)
 
             out_value = nn.Dense(1, name="Value")(x)
