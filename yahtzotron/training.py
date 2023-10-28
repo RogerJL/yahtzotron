@@ -1,13 +1,12 @@
 from collections import deque, defaultdict
 
-import tqdm
-import numpy as np
-from loguru import logger
-
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 import rlax
+import tqdm
+from loguru import logger
 
 from yahtzotron.game import play_tournament
 from yahtzotron.interactive import print_score
@@ -224,7 +223,7 @@ def train_a2c(
                 loss=sum(loss_components),
                 score=scores[p].total_score(),
             )
-            logger.info("epoch_stats {}", epoch_stats)
+            logger.debug("epoch_stats {}: {}", p, epoch_stats)
             for key, val in epoch_stats.items():
                 buf = running_stats[key]
                 if len(buf) == buf.maxlen:
