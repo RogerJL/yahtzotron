@@ -1,5 +1,5 @@
-import numpy as np
 import jax.random
+import numpy as np
 from jax.random import PRNGKey
 
 
@@ -94,7 +94,7 @@ def play_tournament(agents, deterministic_rolls=False, record_trajectories=False
             for roll_num, kept_dice in enumerate(turn_iter):
                 num_to_roll = num_dice - len(kept_dice)
                 new_roll = np.concatenate(
-                    [kept_dice, player_rolls[p, roll_num, :num_to_roll]]
+                    [np.asarray(kept_dice, dtype=np.int32), player_rolls[p, roll_num, :num_to_roll]]
                 )
                 turn_state = turn_iter.send(new_roll)
 
@@ -114,7 +114,4 @@ def play_tournament(agents, deterministic_rolls=False, record_trajectories=False
                         )
                     )
 
-    if record_trajectories:
-        return scores, trajectories
-
-    return scores
+    return scores, trajectories

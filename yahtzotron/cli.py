@@ -4,9 +4,9 @@ cli.py
 Entry point for CLI.
 """
 
+import math
 import os
 import sys
-import math
 import time
 
 import click
@@ -132,7 +132,7 @@ def evaluate(agents, num_rounds, ruleset, deterministic_rolls):
         for _ in progress:
             rngs_, rngs1, rngs2 = jax.random.split(rngs_, 3)
             agent_obj = [create_agent(agent_id, rngs=rngs1) for agent_id in agents]  # Note: Same seed for all agents
-            scorecards = play_tournament(
+            scorecards, _ = play_tournament(
                 agent_obj, deterministic_rolls=deterministic_rolls, rngs=rngs2,  # Note: Same rolls for all agents
             )
             total_scores = [s.total_score() for s in scorecards]

@@ -1,5 +1,7 @@
+import sys
 from collections import namedtuple
 
+from loguru import logger
 
 Category = namedtuple("category", ["name", "score", "counts_towards_bonus"])
 
@@ -40,6 +42,8 @@ class Ruleset:
         self.bonus_cutoff_ = bonus_cutoff
         self.bonus_score_ = bonus_score
 
+        self._roll_lut = None
+
     def score(self, roll, cat_idx, filled_categories, scores):
         if filled_categories[cat_idx]:
             raise ValueError("Cannot score already filled category")
@@ -70,6 +74,19 @@ class Ruleset:
 
     def has_bonus(self):
         return self.bonus_score_ > 0
+
+    def get_lut(self):
+        """Return cached look-up table."""
+        if not self._roll_lut:
+            logger.error("Requesting lut before it is created")
+            sys.exit(1)
+
+        return self._roll_lut
+
+    def set_lut(self, lut):
+        """Load cached look-up table, or compute from scratch."""
+        self._roll_lut = lut
+        return self._roll_lut
 
     def __repr__(self):
         return f"{self.__class__.__name__}(ruleset_name={self.name})"

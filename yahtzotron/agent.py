@@ -1,17 +1,16 @@
+import functools
 import os
 import pickle
-import functools
 
-from loguru import logger
-import numpy as np
-
-import jax
-from jax.random import PRNGKey
-import jax.numpy as jnp
 import flax.linen as nn
+import jax
+import jax.numpy as jnp
+import numpy as np
+from jax.random import PRNGKey
+from loguru import logger
 
 from .rulesets import AVAILABLE_RULESETS
-from .strategy import assemble_roll_lut
+from .strategy import create_lut
 
 TRANSLATE_FROM_ORIGINAL_DECIDE = {'linear': 'Dense_0',
                                   'linear_1': 'Dense_1',
@@ -123,21 +122,6 @@ def create_network(objective, num_dice, num_categories):
     }
 
 
-@memoize
-def get_lut(path, ruleset):
-    """Load cached look-up table, or compute from scratch."""
-    if not os.path.isfile(path):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        roll_lut = assemble_roll_lut(ruleset)
-        with open(path, "wb") as f:
-            pickle.dump(roll_lut, f)
-
-    with open(path, "rb") as f:
-        roll_lut = pickle.load(f)
-
-    return roll_lut
-
-
 def get_opponent_value(opponent_scorecards, network, weights):
     """Compute the maximum value of all given opponents."""
     if not hasattr(opponent_scorecards, "__iter__"):
@@ -181,7 +165,7 @@ def play_turn(
         roll_input = yield kept_dice
         current_dice = tuple(sorted(roll_input))
         dice_count = np.bincount(current_dice, minlength=7)[1:]
-        assert np.all(dice_count - np.bincount(kept_dice, minlength=7)[1:] >= 0)
+        assert bool(np.all(dice_count - np.bincount(kept_dice, minlength=7)[1:] >= 0))
 
         if use_lut:
             observation = assemble_network_inputs(
@@ -306,9 +290,10 @@ def get_action_greedy(rolls_left, current_dice, player_scorecard, roll_lut):
     category_action = np.argmax(expected_payoff)
 
     if rolls_left > 0:
+        category_ = roll_lut["full"][current_dice][category_action]
         dice_to_keep = max(
-            roll_lut["full"][current_dice][category_action].keys(),
-            key=lambda k: roll_lut["full"][current_dice][category_action][k],
+            category_.keys(),
+            key=lambda k: category_[k],
         )
         keep_action = int(np.packbits(dice_to_keep, bitorder="little"))
         return keep_action
@@ -409,7 +394,7 @@ class Yahtzotron:
             opponent_value = None
 
         if self._be_greedy:
-            roll_lut = get_lut(self._roll_lut_path, self._ruleset)
+            roll_lut = self._ruleset.get_lut()
         else:
             roll_lut = None
 
@@ -499,3 +484,6 @@ class Yahtzotron:
 
     def __repr__(self):
         return f"{self.__class__.__name__}(ruleset={self._ruleset}, objective={self._objective})"
+
+    def create_eager_lut(self):
+        self._ruleset.set_lut(create_lut(self._roll_lut_path, self._ruleset))

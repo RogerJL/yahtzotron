@@ -200,12 +200,12 @@ def train_a2c(
             actions = np.array(actions, dtype=np.int32)
             rewards = np.array(rewards, dtype=np.float32) / REWARD_NORM
 
+            if objective_win and p == winner:
+                rewards[-1] += WINNING_REWARD / REWARD_NORM
+
             logger.debug(" observations {}: {}", p, observations)
             logger.debug(" actions {}: {}", p, actions)
             logger.debug(" rewards {}: {}", p, rewards)
-
-            if objective_win and p == winner:
-                rewards[-1] += WINNING_REWARD / REWARD_NORM
 
             weights, opt_state = sgd_step(
                 weights, opt_state, observations, actions, rewards, **loss_kwargs

@@ -1,10 +1,12 @@
-from math import factorial
-from functools import lru_cache
-from collections import Counter
 import itertools
+import os
+import pickle
+from collections import Counter
+from functools import lru_cache
+from math import factorial
 
-import tqdm
 import numpy as np
+import tqdm
 
 
 @lru_cache(maxsize=None)
@@ -112,3 +114,16 @@ def assemble_roll_lut(ruleset):
         "marginal-0": expected_marginal_reward_0step,
         "marginal-1": expected_marginal_reward_1step,
     }
+
+def create_lut(path, ruleset):
+    """Load cached look-up table, or compute from scratch."""
+    if not os.path.isfile(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        roll_lut = assemble_roll_lut(ruleset)
+        with open(path, "wb") as f:
+            pickle.dump(roll_lut, f)
+
+    with open(path, "rb") as f:
+        roll_lut = pickle.load(f)
+
+    return roll_lut
