@@ -97,7 +97,7 @@ def compile_sgd_step(loss_func, optimizer):
     return jax.jit(sgd_step)
 
 
-def get_default_schedules(pretraining=False):
+def get_default_schedules(num_epochs, pretraining=False):
     """Get schedules for learning rate, entropy, TDlambda."""
     if pretraining:
         return dict(
@@ -107,11 +107,11 @@ def get_default_schedules(pretraining=False):
         )
 
     return dict(
-        learning_rate=optax.exponential_decay(1e-3, 60_000, decay_rate=0.2),
+        learning_rate=optax.exponential_decay(1e-3, int(0.60 * num_epochs), decay_rate=0.2),
         entropy=(
-            lambda count: 1e-3 * 0.1 ** (count / 80_000) if count < 80_000 else -1e-2
+            lambda count: 1e-3 * 0.1 ** (count / 0.80 * num_epochs) if count < 0.80 * num_epochs else -1e-2
         ),
-        td_lambda=optax.polynomial_schedule(0.2, 0.8, power=1, transition_steps=60_000),
+        td_lambda=optax.polynomial_schedule(0.2, 0.9, power=1, transition_steps=int(0.60 * num_epochs)),
     )
 
 
@@ -130,7 +130,7 @@ def train_a2c(
 
     objective_win = base_agent.is_objective_winning()
 
-    default_schedules = get_default_schedules(pretraining=pretraining)
+    default_schedules = get_default_schedules(num_epochs, pretraining=pretraining)
 
     if lr_schedule is None:
         lr_schedule = default_schedules["learning_rate"]
