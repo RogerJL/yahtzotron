@@ -58,10 +58,15 @@ def cli(ctx, loglevel):
 @click.option("-n", "--num-epochs", type=click.IntRange(min=0), default=100_000)
 @click.option("--no-restore", is_flag=True)
 @click.option("--objective", type=click.Choice(["win", "avg_score"]), default="win")
-def train(out, ruleset, num_epochs, no_restore, objective):
+@click.option("--profiler-port", type=click.IntRange(min=1024, max=49151), default=None)
+def train(out, ruleset, num_epochs, no_restore, objective, profiler_port):
     """Train a new model through self-play."""
     from yahtzotron.agent import Yahtzotron
     from yahtzotron.training import train_a2c, train_strategy
+
+    if profiler_port:
+        jax.profiler.start_server(profiler_port)
+        print(f"python -m jax.collect_profile {profiler_port} <duration_in_ms>")
 
     load_path = None
     if os.path.exists(out) and not no_restore:

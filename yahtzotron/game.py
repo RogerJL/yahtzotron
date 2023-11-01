@@ -1,4 +1,3 @@
-import jax.random
 import numpy as np
 from jax.random import PRNGKey
 
@@ -76,15 +75,16 @@ def play_tournament(agents, deterministic_rolls=False, record_trajectories=False
     # initialize even when not used
     trajectories = [[] for _ in range(num_players)]
 
+    rngs1 = np.random.default_rng(rngs.tolist())
     for _ in range(ruleset.num_rounds):
-        rngs, rngs1 = jax.random.split(rngs)
         if deterministic_rolls:
             player_rolls = (np.tile(
-                jax.random.randint(rngs1, shape=(1, 3, num_dice), minval=1, maxval=7),
+
+                rngs1.integers(size=(1, 3, num_dice), low=1, high=7),
                 (num_players, 1, 1))
             )
         else:
-            player_rolls = jax.random.randint(rngs1, shape=(num_players, 3, num_dice), minval=1, maxval=7)
+            player_rolls = rngs1.integers(size=(num_players, 3, num_dice), low=1, high=7)
 
         for p in range(num_players):
             my_score = scores[p]
@@ -93,9 +93,8 @@ def play_tournament(agents, deterministic_rolls=False, record_trajectories=False
             turn_iter = agents[p].turn(my_score, other_scores)
             for roll_num, kept_dice in enumerate(turn_iter):
                 num_to_roll = num_dice - len(kept_dice)
-                new_roll = np.concatenate(
-                    [np.asarray(kept_dice, dtype=np.int32), player_rolls[p, roll_num, :num_to_roll]]
-                )
+                dice_ = np.asarray((0,) * num_to_roll + kept_dice)
+                new_roll = np.where(dice_ != 0, dice_, player_rolls[p, roll_num])
                 turn_state = turn_iter.send(new_roll)
 
                 if turn_state["rolls_left"] == 0:
