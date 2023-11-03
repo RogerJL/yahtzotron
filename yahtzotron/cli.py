@@ -59,7 +59,8 @@ def cli(ctx, loglevel):
 @click.option("--no-restore", is_flag=True)
 @click.option("--objective", type=click.Choice(["win", "avg_score"]), default="win")
 @click.option("--profiler-port", type=click.IntRange(min=1024, max=49151), default=None)
-def train(out, ruleset, num_epochs, no_restore, objective, profiler_port):
+@click.option("--no-pretrain", is_flag=True, default=False)
+def train(out, ruleset, num_epochs, no_restore, objective, profiler_port, no_pretrain):
     """Train a new model through self-play."""
     from yahtzotron.agent import Yahtzotron
     from yahtzotron.training import train_a2c, train_strategy
@@ -77,7 +78,9 @@ def train(out, ruleset, num_epochs, no_restore, objective, profiler_port):
 
     yzt = Yahtzotron(ruleset=ruleset, objective=objective, load_path=load_path, rngs=rngs_yzt)
 
-    if load_path is None:
+    if not no_pretrain and load_path is None:
+        # Without pre-training AI will have great difficulty to find straights and bonus
+        yzt.create_eager_lut()
         yzt = train_a2c(yzt, num_epochs=20_000, pretraining=True, rngs=rngs_pre)
 
     yzt = train_a2c(yzt, num_epochs=num_epochs, checkpoint_path=out, rngs=rngs_a2c)
