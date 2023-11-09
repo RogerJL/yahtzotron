@@ -8,7 +8,7 @@ Yahtzee is a game of chance played with 5 dice and involves making strategic dec
 
 The pre-trained agents are close to perfect play (average scores are around 240 for both Yahtzee and Yatzy, just 5-10 points below perfect play).
 
-[Read my blog post about the making of Yahtzotron here.](https://dionhaefner.github.io/2021/04/yahtzotron-learning-to-play-yahtzee-with-advantage-actor-critic/)
+[Read Dion Häfners blog post about the making of Yahtzotron here.](https://dionhaefner.github.io/2021/04/yahtzotron-learning-to-play-yahtzee-with-advantage-actor-critic/)
 
 ### New: Child Yatzy
 Child Yatzy does not use numbered dice faces but rather figures (like Moomin characters).
